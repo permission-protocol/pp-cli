@@ -9,11 +9,21 @@ async function loadJson(name: string): Promise<unknown> {
 }
 
 const keyFile = resolve(process.cwd(), 'tests/fixtures/public-key.pem');
+const rawKeyFile = resolve(process.cwd(), 'tests/fixtures/public-key.raw-base64');
 
 describe('verifyReceipt', () => {
   it('verifies a valid receipt', async () => {
     const receipt = await loadJson('valid.json');
     const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
+    expect(result.verified).toBe(true);
+    if (result.verified) {
+      expect(result.receiptId).toBe('rcpt_valid_001');
+    }
+  });
+
+  it('verifies a valid receipt with a raw Ed25519 base64 public key', async () => {
+    const receipt = await loadJson('valid.json');
+    const result = await verifyReceipt(receipt, { keyFile: rawKeyFile, noNetwork: true });
     expect(result.verified).toBe(true);
     if (result.verified) {
       expect(result.receiptId).toBe('rcpt_valid_001');

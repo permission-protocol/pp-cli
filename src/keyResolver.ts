@@ -2,6 +2,7 @@ import { createPublicKey } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 export const DEFAULT_KEY_URL = 'https://app.permissionprotocol.com/api/v1/keys/current';
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
 export type ResolveKeyOptions = {
   keyFile?: string;
@@ -31,6 +32,9 @@ function asPublicKey(raw: string): ReturnType<typeof createPublicKey> {
     return createPublicKey(trimmed);
   }
   const der = Buffer.from(trimmed, 'base64');
+  if (der.length === 32) {
+    return createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, der]), format: 'der', type: 'spki' });
+  }
   return createPublicKey({ key: der, format: 'der', type: 'spki' });
 }
 

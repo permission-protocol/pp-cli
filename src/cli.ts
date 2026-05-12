@@ -96,7 +96,7 @@ program
   .command('verify')
   .argument('<receipt-file-or-id>', 'Receipt file path, -, receipt id, or share URL')
   .option('--key-url <url>', 'Public key endpoint URL')
-  .option('--key-file <path>', 'Path to public key PEM or base64 DER')
+  .option('--key-file <path>', 'Path to public key PEM, base64 DER, or raw Ed25519 base64')
   .option('--key-id <id>', 'Expected key id')
   .option('--json', 'Emit machine-readable JSON output')
   .option('-q, --quiet', 'Suppress stdout and return exit code only')
