@@ -59,8 +59,40 @@ export type VerifyOptions = {
   now?: Date;
 };
 
+type ReceiptStatus = 'valid' | 'revoked';
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function parseReceiptStatus(receipt: Record<string, unknown>): { ok: true; status: ReceiptStatus } | { ok: false; result: VerifyResult } {
+  if (typeof receipt.status !== 'string') {
+    return {
+      ok: false,
+      result: {
+        verified: false,
+        exitCode: 3,
+        errorCode: 'MALFORMED_RECEIPT',
+        errorMessage: 'receipt status must be a canonical string',
+        receiptId: receipt.id as string,
+      },
+    };
+  }
+
+  if (receipt.status !== 'valid' && receipt.status !== 'revoked') {
+    return {
+      ok: false,
+      result: {
+        verified: false,
+        exitCode: 3,
+        errorCode: 'MALFORMED_RECEIPT',
+        errorMessage: `unsupported receipt status: ${receipt.status}`,
+        receiptId: receipt.id as string,
+      },
+    };
+  }
+
+  return { ok: true, status: receipt.status };
 }
 
 export async function verifyReceipt(receipt: unknown, options: VerifyOptions): Promise<VerifyResult> {
@@ -115,6 +147,24 @@ export async function verifyReceipt(receipt: unknown, options: VerifyOptions): P
     };
   }
 
+  const statusResult = parseReceiptStatus(receipt);
+  if (!statusResult.ok) {
+    return statusResult.result;
+  }
+  const { status } = statusResult;
+
+  const now = options.now ?? new Date();
+  const expiresAt = new Date(receipt.expiresAt as string);
+  if (Number.isNaN(expiresAt.getTime())) {
+    return {
+      verified: false,
+      exitCode: 3,
+      errorCode: 'MALFORMED_RECEIPT',
+      errorMessage: 'expiresAt is not a valid ISO timestamp',
+      receiptId: receipt.id as string,
+    };
+  }
+
   const keyResult = await resolvePublicKey({
     keyFile: options.keyFile,
     keyUrl: options.keyUrl,
@@ -147,19 +197,6 @@ export async function verifyReceipt(receipt: unknown, options: VerifyOptions): P
     };
   }
 
-  const now = options.now ?? new Date();
-  const expiresAt = new Date(receipt.expiresAt as string);
-  if (Number.isNaN(expiresAt.getTime())) {
-    return {
-      verified: false,
-      exitCode: 3,
-      errorCode: 'MALFORMED_RECEIPT',
-      errorMessage: 'expiresAt is not a valid ISO timestamp',
-      receiptId: receipt.id as string,
-    };
-  }
-
-  const status = String(receipt.status);
   if (expiresAt.getTime() <= now.getTime() || status === 'revoked') {
     return {
       verified: false,
