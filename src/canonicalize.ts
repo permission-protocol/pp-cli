@@ -53,7 +53,8 @@ function sortKeys(obj: unknown): unknown {
     return obj.map(sortKeys);
   }
   
-  const sorted: Record<string, unknown> = {};
+  // Preserve "__proto__" as signed data instead of invoking Object.prototype's setter.
+  const sorted: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   const keys = Object.keys(obj as Record<string, unknown>).sort();
   
   for (const key of keys) {
