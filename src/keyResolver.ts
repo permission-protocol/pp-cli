@@ -27,11 +27,15 @@ export type ResolveKeyResult = ResolveKeySuccess | ResolveKeyFailure;
 
 function asPublicKey(raw: string): ReturnType<typeof createPublicKey> {
   const trimmed = raw.trim();
-  if (trimmed.includes('BEGIN PUBLIC KEY')) {
-    return createPublicKey(trimmed);
+  const key = trimmed.includes('BEGIN PUBLIC KEY')
+    ? createPublicKey(trimmed)
+    : createPublicKey({ key: Buffer.from(trimmed, 'base64'), format: 'der', type: 'spki' });
+
+  if (key.asymmetricKeyType !== 'ed25519') {
+    throw new Error(`unsupported public key type: ${key.asymmetricKeyType ?? 'unknown'}`);
   }
-  const der = Buffer.from(trimmed, 'base64');
-  return createPublicKey({ key: der, format: 'der', type: 'spki' });
+
+  return key;
 }
 
 type RemoteKeyRecord = {

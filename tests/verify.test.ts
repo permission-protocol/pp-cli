@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { canonicalizeReceiptBytes } from '../src/canonicalize.js';
 import { verifyReceipt } from '../src/verify.js';
 
 async function loadJson(name: string): Promise<unknown> {
@@ -57,6 +59,25 @@ describe('verifyReceipt', () => {
     if (!result.verified) {
       expect(result.exitCode).toBe(1);
       expect(result.errorCode).toBe('SIGNATURE_INVALID');
+    }
+  });
+
+  it('rejects non-Ed25519 signing keys', async () => {
+    const receipt = (await loadJson('valid.json')) as Record<string, unknown>;
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    receipt.signatureKeyId = 'rsa-test';
+    receipt.signatureValue = sign(null, canonicalizeReceiptBytes(receipt), privateKey).toString('base64');
+
+    const encodedKey = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+    const keyUrl = `data:application/json,${encodeURIComponent(
+      JSON.stringify({ keyId: receipt.signatureKeyId, publicKey: encodedKey }),
+    )}`;
+    const result = await verifyReceipt(receipt, { keyUrl });
+
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(4);
+      expect(result.errorCode).toBe('KEY_RESOLUTION_FAILED');
     }
   });
 });
