@@ -9,6 +9,18 @@ async function loadJson(name: string): Promise<unknown> {
 }
 
 const keyFile = resolve(process.cwd(), 'tests/fixtures/public-key.pem');
+const remoteKeyFile = resolve(process.cwd(), 'tests/fixtures/public-key.base64');
+
+async function remoteKeyUrl(status?: unknown): Promise<string> {
+  const publicKey = (await readFile(remoteKeyFile, 'utf8')).trim();
+  const payload = {
+    keyId: 'pp-test-2026-q2',
+    algorithm: 'ed25519',
+    publicKey,
+    ...(status === undefined ? {} : { status }),
+  };
+  return `data:application/json,${encodeURIComponent(JSON.stringify(payload))}`;
+}
 
 describe('verifyReceipt', () => {
   it('verifies a valid receipt', async () => {
@@ -47,6 +59,34 @@ describe('verifyReceipt', () => {
     if (!result.verified) {
       expect(result.exitCode).toBe(4);
       expect(result.errorCode).toBe('KEY_RESOLUTION_FAILED');
+    }
+  });
+
+  it('verifies a receipt with a remotely resolved rotated key', async () => {
+    const receipt = await loadJson('valid.json');
+    const result = await verifyReceipt(receipt, { keyUrl: await remoteKeyUrl('rotated') });
+    expect(result.verified).toBe(true);
+  });
+
+  it('rejects a remotely resolved revoked key', async () => {
+    const receipt = await loadJson('valid.json');
+    const result = await verifyReceipt(receipt, { keyUrl: await remoteKeyUrl('revoked') });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(4);
+      expect(result.errorCode).toBe('KEY_RESOLUTION_FAILED');
+      expect(result.errorMessage).toBe('key "pp-test-2026-q2" is revoked');
+    }
+  });
+
+  it('rejects an explicit unknown remote key status', async () => {
+    const receipt = await loadJson('valid.json');
+    const result = await verifyReceipt(receipt, { keyUrl: await remoteKeyUrl('disabled') });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(4);
+      expect(result.errorCode).toBe('KEY_RESOLUTION_FAILED');
+      expect(result.errorMessage).toBe('key "pp-test-2026-q2" has unsupported status "disabled"');
     }
   });
 
