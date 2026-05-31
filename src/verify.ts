@@ -133,9 +133,21 @@ export async function verifyReceipt(receipt: unknown, options: VerifyOptions): P
     };
   }
 
+  // Validate that the resolved key is actually an Ed25519 key
+  const keyType = keyResult.key.asymmetricKeyType;
+  if (keyType !== 'ed25519') {
+    return {
+      verified: false,
+      exitCode: 1,
+      errorCode: 'SIGNATURE_INVALID',
+      errorMessage: `key type mismatch: receipt declares ed25519 but resolved key is ${keyType}`,
+      receiptId: receipt.id as string,
+    };
+  }
+
   const payloadBytes = canonicalizeReceiptBytes(receipt);
   const signatureBytes = Buffer.from(receipt.signatureValue, 'base64');
-  const ok = verifySignature(null, payloadBytes, keyResult.key, signatureBytes);
+  const ok = verifySignature('ed25519', payloadBytes, keyResult.key, signatureBytes);
 
   if (!ok) {
     return {
