@@ -63,6 +63,14 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isNonEmptySignedField(receipt: Record<string, unknown>, field: string): boolean {
+  const value = receipt[field];
+  if (value === undefined || value === null) {
+    return false;
+  }
+  return true;
+}
+
 export async function verifyReceipt(receipt: unknown, options: VerifyOptions): Promise<VerifyResult> {
   if (!isObject(receipt)) {
     return {
@@ -74,7 +82,7 @@ export async function verifyReceipt(receipt: unknown, options: VerifyOptions): P
   }
 
   for (const field of REQUIRED_SIGNED_FIELDS) {
-    if (!(field in receipt)) {
+    if (!isNonEmptySignedField(receipt, field)) {
       return {
         verified: false,
         exitCode: 3,
