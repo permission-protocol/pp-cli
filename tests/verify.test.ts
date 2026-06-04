@@ -59,4 +59,20 @@ describe('verifyReceipt', () => {
       expect(result.errorCode).toBe('SIGNATURE_INVALID');
     }
   });
+
+  it('returns malformed when a required signed field is null', async () => {
+    const receipt = await loadJson('valid.json') as Record<string, unknown>;
+    // The canonicalizer omits null values from signing bytes, but the
+    // previous required-field check only tested `field in receipt`,
+    // so a key whose value is null satisfied presence and produced a
+    // verified result against a tampered requestJson scope.
+    receipt.requestJson = null;
+    const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(3);
+      expect(result.errorCode).toBe('MALFORMED_RECEIPT');
+      expect(result.errorMessage.toLowerCase()).toContain('requestjson');
+    }
+  });
 });
