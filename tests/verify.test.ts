@@ -59,4 +59,18 @@ describe('verifyReceipt', () => {
       expect(result.errorCode).toBe('SIGNATURE_INVALID');
     }
   });
+
+  it('returns malformed for unsupported receiptVersion', async () => {
+    const receipt = await loadJson('valid.json') as Record<string, unknown>;
+    // Forge a future receiptVersion value, which would otherwise pass
+    // required-field, signature, expiry, and status checks.
+    receipt.receiptVersion = 'v2';
+    const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(3);
+      expect(result.errorCode).toBe('MALFORMED_RECEIPT');
+      expect(result.errorMessage.toLowerCase()).toContain('receiptversion');
+    }
+  });
 });
