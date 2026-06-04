@@ -27,11 +27,19 @@ export type ResolveKeyResult = ResolveKeySuccess | ResolveKeyFailure;
 
 function asPublicKey(raw: string): ReturnType<typeof createPublicKey> {
   const trimmed = raw.trim();
+  let key: ReturnType<typeof createPublicKey>;
   if (trimmed.includes('BEGIN PUBLIC KEY')) {
-    return createPublicKey(trimmed);
+    key = createPublicKey(trimmed);
+  } else {
+    const der = Buffer.from(trimmed, 'base64');
+    key = createPublicKey({ key: der, format: 'der', type: 'spki' });
   }
-  const der = Buffer.from(trimmed, 'base64');
-  return createPublicKey({ key: der, format: 'der', type: 'spki' });
+  if (key.asymmetricKeyType !== 'ed25519') {
+    throw new Error(
+      `public key is ${key.asymmetricKeyType}; only ed25519 signing keys are accepted`
+    );
+  }
+  return key;
 }
 
 type RemoteKeyRecord = {
