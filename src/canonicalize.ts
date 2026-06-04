@@ -43,23 +43,31 @@ const SIGNED_FIELDS = [
 
 /**
  * Recursively sort object keys for deterministic JSON.
+ * Uses Object.create(null) for the result object to avoid
+ * prototype-pollution style assignments being silently
+ * discarded (or hijacked) by Object.prototype setters.
  */
 function sortKeys(obj: unknown): unknown {
   if (obj === null || typeof obj !== 'object') {
     return obj;
   }
-  
+
   if (Array.isArray(obj)) {
     return obj.map(sortKeys);
   }
-  
-  const sorted: Record<string, unknown> = {};
+
+  const sorted = Object.create(null) as Record<string, unknown>;
   const keys = Object.keys(obj as Record<string, unknown>).sort();
-  
+
   for (const key of keys) {
-    sorted[key] = sortKeys((obj as Record<string, unknown>)[key]);
+    Object.defineProperty(sorted, key, {
+      value: sortKeys((obj as Record<string, unknown>)[key]),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
-  
+
   return sorted;
 }
 
@@ -77,15 +85,24 @@ function serializeValue(value: unknown): unknown {
  * Extract and canonicalize receipt fields for signing.
  */
 export function canonicalizeReceipt(receipt: Record<string, unknown>): string {
-  const canonical: Record<string, unknown> = {};
-  
+  // Use a null-prototype object so that a malicious receipt cannot
+  // route `__proto__` (or any other inherited key) through
+  // Object.prototype setters and silently drop its signed value from
+  // the canonical bytes.
+  const canonical = Object.create(null) as Record<string, unknown>;
+
   for (const field of SIGNED_FIELDS) {
     const value = receipt[field];
     if (value !== undefined && value !== null) {
-      canonical[field] = serializeValue(value);
+      Object.defineProperty(canonical, field, {
+        value: serializeValue(value),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     }
   }
-  
+
   // Sort keys and stringify deterministically
   const sorted = sortKeys(canonical);
   return JSON.stringify(sorted);
