@@ -2,6 +2,8 @@ import { verify as verifySignature } from 'node:crypto';
 import { canonicalizeReceiptBytes, CANONICALIZATION_VERSION } from './canonicalize.js';
 import { resolvePublicKey } from './keyResolver.js';
 
+export const RECEIPT_VERSION = 'v1';
+
 const REQUIRED_SIGNED_FIELDS = [
   'id',
   'companyId',
@@ -91,6 +93,16 @@ export async function verifyReceipt(receipt: unknown, options: VerifyOptions): P
       exitCode: 3,
       errorCode: 'MALFORMED_RECEIPT',
       errorMessage: 'unsupported canonicalization version',
+      receiptId: receipt.id as string,
+    };
+  }
+
+  if (receipt.receiptVersion !== RECEIPT_VERSION) {
+    return {
+      verified: false,
+      exitCode: 3,
+      errorCode: 'MALFORMED_RECEIPT',
+      errorMessage: `unsupported receiptVersion: expected "${RECEIPT_VERSION}"`,
       receiptId: receipt.id as string,
     };
   }
