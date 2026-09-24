@@ -23,6 +23,27 @@ const REQUIRED_SIGNED_FIELDS = [
   'createdAt',
 ] as const;
 
+const RECEIPT_VERSION = 'v1';
+
+const REQUIRED_STRING_FIELDS = [
+  'id',
+  'companyId',
+  'idemKey',
+  'agentId',
+  'runId',
+  'inputHash',
+  'status',
+  'riskTier',
+  'policyVersion',
+  'summary',
+  'receiptVersion',
+  'canonicalization',
+  'signatureAlg',
+  'signatureKeyId',
+  'expiresAt',
+  'createdAt',
+] as const;
+
 export type VerifyResult =
   | {
       verified: true;
@@ -63,6 +84,16 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function malformed(receipt: Record<string, unknown>, errorMessage: string): VerifyResult {
+  return {
+    verified: false,
+    exitCode: 3,
+    errorCode: 'MALFORMED_RECEIPT',
+    errorMessage,
+    receiptId: typeof receipt.id === 'string' ? receipt.id : undefined,
+  };
+}
+
 export async function verifyReceipt(receipt: unknown, options: VerifyOptions): Promise<VerifyResult> {
   if (!isObject(receipt)) {
     return {
@@ -74,15 +105,27 @@ export async function verifyReceipt(receipt: unknown, options: VerifyOptions): P
   }
 
   for (const field of REQUIRED_SIGNED_FIELDS) {
-    if (!(field in receipt)) {
-      return {
-        verified: false,
-        exitCode: 3,
-        errorCode: 'MALFORMED_RECEIPT',
-        errorMessage: `missing required signed field: ${field}`,
-        receiptId: typeof receipt.id === 'string' ? receipt.id : undefined,
-      };
+    if (!Object.hasOwn(receipt, field) || receipt[field] === undefined || receipt[field] === null) {
+      return malformed(receipt, `missing required signed field: ${field}`);
     }
+  }
+
+  for (const field of REQUIRED_STRING_FIELDS) {
+    if (typeof receipt[field] !== 'string') {
+      return malformed(receipt, `required signed field must be a string: ${field}`);
+    }
+  }
+
+  if (!isObject(receipt.requestJson) || Array.isArray(receipt.requestJson)) {
+    return malformed(receipt, 'requestJson must be a JSON object');
+  }
+
+  if (!Array.isArray(receipt.reasonCodes)) {
+    return malformed(receipt, 'reasonCodes must be an array');
+  }
+
+  if (receipt.receiptVersion !== RECEIPT_VERSION) {
+    return malformed(receipt, 'unsupported receipt version');
   }
 
   if (receipt.canonicalization !== CANONICALIZATION_VERSION) {

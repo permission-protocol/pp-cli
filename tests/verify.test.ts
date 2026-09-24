@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
+import { createPrivateKey, sign } from 'node:crypto';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { canonicalizeReceiptBytes } from '../src/canonicalize.js';
 import { verifyReceipt } from '../src/verify.js';
 
 async function loadJson(name: string): Promise<unknown> {
@@ -9,6 +11,15 @@ async function loadJson(name: string): Promise<unknown> {
 }
 
 const keyFile = resolve(process.cwd(), 'tests/fixtures/public-key.pem');
+const privateKeyFile = resolve(process.cwd(), 'tests/fixtures/private-key.pem');
+
+async function signFixtureReceipt(receipt: Record<string, unknown>): Promise<void> {
+  receipt.signatureValue = sign(
+    null,
+    canonicalizeReceiptBytes(receipt),
+    createPrivateKey(await readFile(privateKeyFile)),
+  ).toString('base64');
+}
 
 describe('verifyReceipt', () => {
   it('verifies a valid receipt', async () => {
@@ -37,6 +48,35 @@ describe('verifyReceipt', () => {
     if (!result.verified) {
       expect(result.exitCode).toBe(3);
       expect(result.errorCode).toBe('MALFORMED_RECEIPT');
+    }
+  });
+
+  it('returns malformed for an unsupported receipt version', async () => {
+    const receipt = (await loadJson('valid.json')) as Record<string, unknown>;
+    receipt.receiptVersion = 'v2';
+    await signFixtureReceipt(receipt);
+
+    const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(3);
+      expect(result.errorCode).toBe('MALFORMED_RECEIPT');
+      expect(result.errorMessage).toBe('unsupported receipt version');
+    }
+  });
+
+  it('returns malformed when a required signed field is null', async () => {
+    const receipt = (await loadJson('valid.json')) as Record<string, unknown>;
+    delete receipt.requestJson;
+    await signFixtureReceipt(receipt);
+    receipt.requestJson = null;
+
+    const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(3);
+      expect(result.errorCode).toBe('MALFORMED_RECEIPT');
+      expect(result.errorMessage).toBe('missing required signed field: requestJson');
     }
   });
 
