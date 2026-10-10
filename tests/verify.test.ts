@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { canonicalizeReceiptBytes } from '../src/canonicalize.js';
 import { verifyReceipt } from '../src/verify.js';
 
 async function loadJson(name: string): Promise<unknown> {
@@ -9,6 +11,7 @@ async function loadJson(name: string): Promise<unknown> {
 }
 
 const keyFile = resolve(process.cwd(), 'tests/fixtures/public-key.pem');
+const privateKeyFile = resolve(process.cwd(), 'tests/fixtures/private-key.pem');
 
 describe('verifyReceipt', () => {
   it('verifies a valid receipt', async () => {
@@ -52,6 +55,21 @@ describe('verifyReceipt', () => {
 
   it('returns signature invalid for tampered receipt', async () => {
     const receipt = await loadJson('tampered.json');
+    const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
+    expect(result.verified).toBe(false);
+    if (!result.verified) {
+      expect(result.exitCode).toBe(1);
+      expect(result.errorCode).toBe('SIGNATURE_INVALID');
+    }
+  });
+
+  it('rejects tampering with a nested __proto__ request field', async () => {
+    const receipt = await loadJson('valid.json') as Record<string, unknown>;
+    const privateKey = await readFile(privateKeyFile, 'utf8');
+    receipt.requestJson = JSON.parse('{"action":"deploy:production","__proto__":{"scope":"before"}}');
+    receipt.signatureValue = sign(null, canonicalizeReceiptBytes(receipt), privateKey).toString('base64');
+    receipt.requestJson = JSON.parse('{"action":"deploy:production","__proto__":{"scope":"after"}}');
+
     const result = await verifyReceipt(receipt, { keyFile, noNetwork: true });
     expect(result.verified).toBe(false);
     if (!result.verified) {
