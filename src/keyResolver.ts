@@ -39,9 +39,14 @@ type RemoteKeyRecord = {
   id?: string;
   publicKey?: string;
   key?: string;
+  status?: unknown;
 };
 
-function pickKeyFromPayload(payload: unknown, signatureKeyId: string): string | undefined {
+type PickKeyResult =
+  | { ok: true; keyText: string }
+  | { ok: false; errorMessage: string };
+
+function pickKeyFromPayload(payload: unknown, signatureKeyId: string): PickKeyResult | undefined {
   if (!payload || typeof payload !== 'object') {
     return undefined;
   }
@@ -59,11 +64,28 @@ function pickKeyFromPayload(payload: unknown, signatureKeyId: string): string | 
     if (!id || id !== signatureKeyId) {
       continue;
     }
+
+    if (candidate.status !== undefined) {
+      if (candidate.status !== 'active' && candidate.status !== 'rotated' && candidate.status !== 'revoked') {
+        return {
+          ok: false,
+          errorMessage: `key "${signatureKeyId}" has unsupported status "${String(candidate.status)}"`,
+        };
+      }
+
+      if (candidate.status === 'revoked') {
+        return {
+          ok: false,
+          errorMessage: `key "${signatureKeyId}" is revoked`,
+        };
+      }
+    }
+
     if (typeof candidate.publicKey === 'string') {
-      return candidate.publicKey;
+      return { ok: true, keyText: candidate.publicKey };
     }
     if (typeof candidate.key === 'string') {
-      return candidate.key;
+      return { ok: true, keyText: candidate.key };
     }
   }
 
@@ -115,8 +137,8 @@ export async function resolvePublicKey(options: ResolveKeyOptions): Promise<Reso
     }
 
     const payload = (await response.json()) as unknown;
-    const keyText = pickKeyFromPayload(payload, signatureKeyId);
-    if (!keyText) {
+    const keyResult = pickKeyFromPayload(payload, signatureKeyId);
+    if (!keyResult) {
       return {
         ok: false,
         errorCode: 'KEY_RESOLUTION_FAILED',
@@ -124,7 +146,15 @@ export async function resolvePublicKey(options: ResolveKeyOptions): Promise<Reso
       };
     }
 
-    return { ok: true, key: asPublicKey(keyText), keySource: finalKeyUrl };
+    if (!keyResult.ok) {
+      return {
+        ok: false,
+        errorCode: 'KEY_RESOLUTION_FAILED',
+        errorMessage: keyResult.errorMessage,
+      };
+    }
+
+    return { ok: true, key: asPublicKey(keyResult.keyText), keySource: finalKeyUrl };
   } catch (error) {
     return {
       ok: false,
